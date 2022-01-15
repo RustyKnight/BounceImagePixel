@@ -9,6 +9,10 @@ Inspired by [Click to form an image](https://codepen.io/allanpope/pen/LVWYYd) an
 
 <img src="Bouncy.gif">
 
+# Requirements
+
+![Java](https://img.shields.io/badge/Java-16.0.2-orange) ![Netbeans](https://img.shields.io/badge/Netbeans-12.4-orange)
+
 # Why?
 
 Why mot?  This is an experiment in animation, it's an experiment in my "animation playground" library, it's annoyingly fun.
