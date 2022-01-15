@@ -19,7 +19,7 @@ Why mot?  This is an experiment in animation, it's an experiment in my "animatio
 
 One thing to remember, this example is animating the pixles of a 300x300 image (90000 individual objects), which I think is quite neat
 
-~~# What's the purpose of the "random delay"~~
+# ~~What's the purpose of the "random delay"~~
 
 ~~The random delay is there to prevent a pixel wave.  Where the center of the circle is clear and all the pixles "fall in".  Maybe a variable speed might be a better idea, but I did find this produced other side effects.~~
 
