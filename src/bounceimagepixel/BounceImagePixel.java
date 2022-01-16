@@ -14,10 +14,13 @@ import java.awt.EventQueue;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
+import java.awt.RenderingHints;
+import java.awt.Shape;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.geom.Ellipse2D;
 import java.awt.geom.Point2D;
+import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.time.Duration;
@@ -35,11 +38,12 @@ import javax.swing.Timer;
 import org.kaizen.animation.Animatable;
 import org.kaizen.animation.AnimatableDuration;
 import org.kaizen.animation.AnimatableDurationListenerAdapter;
-import org.kaizen.animation.AnimatableListener;
+import org.kaizen.animation.AnimatableListenerAdapter;
 import org.kaizen.animation.DefaultAnimatable;
 import org.kaizen.animation.DefaultAnimatableDuration;
 import org.kaizen.animation.curves.Curves;
 import org.kaizen.animation.ranges.DoubleRange;
+import org.kaizen.animation.ranges.FloatRange;
 import org.kaizen.animation.ranges.Range;
 
 public class BounceImagePixel {
@@ -53,7 +57,7 @@ public class BounceImagePixel {
             @Override
             public void run() {
                 try {
-                    BufferedImage img = ImageIO.read(getClass().getResource("/images/MegaTokyo50.png"));
+                    BufferedImage img = ImageIO.read(getClass().getResource("/images/MegaTokyo.png"));
                     JFrame frame = new JFrame();
                     frame.add(new TestPane(img));
                     frame.pack();
@@ -72,28 +76,40 @@ public class BounceImagePixel {
         private final double diameter = radius * 2;
         private List<AnimatableDot> dots = new ArrayList<>(1024);
 
-        private DefaultAnimatable animatable = new DefaultAnimatable(new AnimatableListener() {
+        // This is a good demonstration of why state variables need to be handled better
+        // Maybe encapsulated into custom animatables?
+        private boolean requiresTransition = false;
+        private float alpha = 1.0f;
+        private FloatRange alphaRange = new FloatRange(0f, 1.0f);
+
+        private boolean isBouncing = false;
+
+        private BufferedImage sourceImage;
+
+        private DefaultAnimatable animatable = new DefaultAnimatable(new AnimatableListenerAdapter() {
             @Override
             public void animationChanged(Animatable animator) {
                 repaint();
             }
+        });
 
+        private AnimatableDuration transitionAnimation = new DefaultAnimatableDuration(Duration.ofSeconds(1), Curves.QUART_IN_OUT.getCurve(), new AnimatableDurationListenerAdapter() {
             @Override
-            public void animationStarted(Animatable animator) {
+            public void animationChanged(Animatable animator) {
+                alpha = alphaRange.valueAt(transitionAnimation.getProgress());
+                repaint();
             }
 
             @Override
-            public void animationStopped(Animatable animator) {
+            public void animationCompleted(Animatable animator) {
+                didCompleteTransition();
             }
         });
 
         public TestPane(BufferedImage img) {
             setBackground(Color.BLACK);
 
-            Random rnd = new Random();
-
-            int xOffset = (int) (diameter - img.getWidth()) / 2;
-            int yOffset = (int) (diameter - img.getWidth()) / 2;
+            sourceImage = img;
 
             AnimatableDot.Observer dotObserver = new AnimatableDot.Observer() {
                 @Override
@@ -103,13 +119,120 @@ public class BounceImagePixel {
                 }
             };
 
-            int pixel = 0;
+            prepareImageDots(img, dotObserver);
+//            preparePixelDots(img, dotObserver);
+
+            Collections.shuffle(dots);
+
+            addMouseListener(new MouseAdapter() {
+                @Override
+                public void mouseClicked(MouseEvent e) {
+                    isBouncing = !isBouncing;
+                    animatable.stop();
+                    dotsThatHaveCompleted = 0;
+                    
+                    if (isBouncing && requiresTransition) {
+                        alphaRange.reverse();
+                        transitionAnimation.start();
+                    } else {
+                        didCompleteTransition();
+                    }
+                }
+            });
+        }
+
+        protected void didCompleteTransition() {            
+            Instant startedAt = Instant.now();
+            for (AnimatableDot dot : dots) {
+                if (isBouncing) {
+                    dot.setState(AnimatableDot.State.RUN);
+                } else {
+                    dot.setState(AnimatableDot.State.IMAGE);
+                }
+            }
+            Duration duration = Duration.between(startedAt, Instant.now());
+            System.out.println("Took: " + duration.toSecondsPart() + "." + duration.toMillisPart() + "s");
+            animatable.start();
+        }
+
+        private int dotsThatHaveCompleted = 0;
+
+        protected void stopIfAllDotsCompleted() {
+            if (animatable.isRunning()) {
+                if (dotsThatHaveCompleted >= dots.size()) {
+                    animatable.stop();
+                    if (requiresTransition) {
+                        alphaRange.reverse();
+                        transitionAnimation.start();
+                    }
+                }
+            }
+            repaint();
+        }
+
+        protected void prepareImageDots(BufferedImage img, AnimatableDot.Observer dotObserver) {
+            requiresTransition = true;
+
+            int pixelSize = 10;
+            BufferedImage pixelated = ImageUtil.pixelate(img, pixelSize);
+
+            int rows = (int) Math.ceil(img.getWidth() / (double) pixelSize);
+            int cols = (int) Math.ceil(img.getHeight() / (double) pixelSize);
+
+            Random rnd = new Random();
+
+            int xOffset = (int) (diameter - img.getWidth()) / 2;
+            int yOffset = (int) (diameter - img.getWidth()) / 2;
+
+            for (int x = 0; x < cols; x++) {
+                for (int y = 0; y < rows; y++) {
+//                    Color color = new Color(img.getRGB(x, y), true);
+
+                    int blockWidth = pixelSize;
+                    int blockHeight = pixelSize;
+
+                    int xPos = x * pixelSize;
+                    int yPos = y * pixelSize;
+
+                    if (xPos + blockWidth > pixelated.getWidth()) {
+                        blockWidth = pixelated.getWidth() - xPos;
+                    }
+                    if (yPos + blockHeight > pixelated.getHeight()) {
+                        blockHeight = pixelated.getHeight() - yPos;
+                    }
+
+                    BufferedImage block = pixelated.getSubimage(xPos, yPos, blockWidth, blockHeight);
+                    Point2D pixelLocation = new Point2D.Double(xPos + xOffset, yPos + yOffset);
+
+                    ImageDot dot = new ImageDot(pixelLocation, block);
+                    double fromAngle = 360.0 * rnd.nextDouble();
+
+                    double angleRange = (180 * rnd.nextDouble()) * (rnd.nextBoolean() ? 1 : -1);
+
+                    double toAngle = fromAngle + angleRange;
+
+                    Point2D fromPoint = Utilities.pointOnCircle(fromAngle, radius);
+                    Point2D toPoint = Utilities.pointOnCircle(toAngle, radius);
+
+                    Point2DRange animationRange = new Point2DRange(fromPoint, toPoint);
+
+                    MovableAnimatableDot animatable = new MovableAnimatableDot(dot, animationRange, dotObserver);
+                    dots.add(animatable);
+                }
+            }
+        }
+
+        protected void preparePixelDots(BufferedImage img, AnimatableDot.Observer dotObserver) {
+            Random rnd = new Random();
+
+            int xOffset = (int) (diameter - img.getWidth()) / 2;
+            int yOffset = (int) (diameter - img.getWidth()) / 2;
+
             for (int x = 0; x < img.getWidth(); x++) {
                 for (int y = 0; y < img.getHeight(); y++) {
-                    pixel += 1;
                     Color color = new Color(img.getRGB(x, y), true);
                     Point2D pixelLocation = new Point2D.Double(x + xOffset, y + yOffset);
-                    Dot dot = new Dot(pixelLocation, color);
+                    PixelDot dot = new PixelDot(pixelLocation, color);
 //                    if (pixel % 100 == 0) {
                     double fromAngle = 360.0 * rnd.nextDouble();
 
@@ -124,47 +247,8 @@ public class BounceImagePixel {
 
                     MovableAnimatableDot animatable = new MovableAnimatableDot(dot, animationRange, dotObserver);
                     dots.add(animatable);
-//                    } else {
-//                        FadableAnimatableDot animatable = new FadableAnimatableDot(dot, delay, dotObserver);
-//                        dots.add(animatable);
-//                    }
                 }
             }
-
-            Collections.shuffle(dots);
-
-            addMouseListener(new MouseAdapter() {
-                @Override
-                public void mouseClicked(MouseEvent e) {
-                    animatable.stop();
-                    dotsThatHaveCompleted = 0;
-                    Instant startedAt = Instant.now();
-                    for (AnimatableDot dot : dots) {
-                        switch (dot.getState()) {
-                            case IMAGE:
-                                dot.setState(AnimatableDot.State.RUN);
-                                break;
-                            case RUN:
-                                dot.setState(AnimatableDot.State.IMAGE);
-                                break;
-                        }
-                    }
-                    Duration duration = Duration.between(startedAt, Instant.now());
-                    System.out.println("Took: " + duration.toSecondsPart() + "." + duration.toMillisPart() + "s");
-                    animatable.start();
-                }
-            });
-        }
-
-        private int dotsThatHaveCompleted = 0;
-
-        protected void stopIfAllDotsCompleted() {
-            if (animatable.isRunning()) {
-                if (dotsThatHaveCompleted >= dots.size()) {
-                    animatable.stop();
-                }
-            }
-            repaint();
         }
 
         @Override
@@ -176,6 +260,10 @@ public class BounceImagePixel {
         protected void paintComponent(Graphics g) {
             super.paintComponent(g);
             Graphics2D g2d = (Graphics2D) g.create();
+            RenderingHints hints = new RenderingHints(
+                    RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON
+            );
+            g2d.setRenderingHints(hints);
 
             double diameter = radius * 2;
 
@@ -184,9 +272,22 @@ public class BounceImagePixel {
             g2d.translate(xOffset, yOffset);
             g2d.setColor(Color.DARK_GRAY);
             g2d.draw(new Ellipse2D.Double(0, 0, diameter, diameter));
+
+            if (requiresTransition) {
+                g2d.setComposite(AlphaComposite.SrcOver.derive(1.0f - alpha));
+            }
+
             for (AnimatableDot dot : dots) {
                 dot.paint(g2d);
             }
+
+            if (requiresTransition) {
+                int xPos = (int) (diameter - sourceImage.getWidth()) / 2;
+                int yPos = (int) (diameter - sourceImage.getHeight()) / 2;
+                g2d.setComposite(AlphaComposite.SrcOver.derive(alpha));
+                g2d.drawImage(sourceImage, xPos, yPos, this);
+            }
+
             g2d.dispose();
         }
 
@@ -270,7 +371,7 @@ public class BounceImagePixel {
 
         // Randomise the bounce duration on each cycle
         private Random rnd = new Random();
-        private DurationRange delayRange = new DurationRange(Duration.ofSeconds(5), Duration.ofSeconds(10));
+        private DurationRange animationRange = new DurationRange(Duration.ofSeconds(3), Duration.ofSeconds(5));
 
         public RandimisedDurationAnimatableDot(Dot dot, Observer observer) {
             super(dot, observer);
@@ -278,7 +379,8 @@ public class BounceImagePixel {
 
         @Override
         public Duration getAnimationDuration() {
-            return delayRange.valueAt(rnd.nextDouble());
+            Duration valueAt = animationRange.valueAt(rnd.nextDouble());
+            return valueAt;
         }
 
     }
@@ -385,7 +487,9 @@ public class BounceImagePixel {
         }
 
         protected void makeImageAnimatable() {
-            imageAnimatable = new DefaultAnimatableDuration(getAnimationDuration(), Curves.QUART_OUT.getCurve(), new AnimatableDurationListenerAdapter() {
+//            Duration duration = getAnimationDuration();
+            Duration duration = Duration.ofSeconds(1);
+            imageAnimatable = new DefaultAnimatableDuration(duration, Curves.QUART_OUT.getCurve(), new AnimatableDurationListenerAdapter() {
                 @Override
                 public void animationCompleted(Animatable animator) {
                     currentLocation = animationRange.valueAt(1);
@@ -429,7 +533,7 @@ public class BounceImagePixel {
         @Override
         public void paint(Graphics2D g) {
             Dot dot = getDot();
-            Point2D location = dot.imageLocation;
+            Point2D location = dot.getImageLocation();
             Graphics2D g2d = (Graphics2D) g.create();
             g2d.setComposite(AlphaComposite.SrcOver.derive((float) opacity));
             g2d.translate(location.getX(), location.getY());
@@ -485,13 +589,52 @@ public class BounceImagePixel {
 
     }
 
-    public static class Dot {
+    public static interface Dot {
+
+        public Point2D getImageLocation();
+
+        public void paint(Graphics2D g);
+    }
+
+    public static class ImageDot implements Dot {
+
+        private Color color;
+        private Point2D imageLocation;
+        private Shape clipShape;
+        private BufferedImage img;
+
+        public ImageDot(Point2D pixelPoint, BufferedImage img) {
+            this.color = color;
+            this.imageLocation = pixelPoint;
+            this.img = img;
+
+            int width = img.getWidth();
+            int height = img.getHeight();
+
+            clipShape = new RoundRectangle2D.Double(0, 0, width, height, width / 4, height / 4);
+        }
+
+        public Point2D getImageLocation() {
+            return imageLocation;
+        }
+
+        public void paint(Graphics2D g) {
+            Graphics2D g2d = (Graphics2D) g.create();
+//            g2d.setColor(Color.WHITE);
+//            g2d.draw(clipShape);
+            g2d.setClip(clipShape);
+            g2d.drawImage(img, 0, 0, null);
+            g2d.dispose();
+        }
+    }
+
+    public static class PixelDot implements Dot {
 
         private Color color;
         private Point2D imageLocation;
         private Rectangle dot = new Rectangle(0, 0, 1, 1);
 
-        public Dot(Point2D pixelPoint, Color color) {
+        public PixelDot(Point2D pixelPoint, Color color) {
             this.color = color;
             this.imageLocation = pixelPoint;
         }
@@ -553,14 +696,76 @@ public class BounceImagePixel {
         }
 
         public Duration getDistance() {
-            return Duration.ofNanos(getTo().toNanos() - getFrom().toNanos());
+            return Duration.ofMillis(getTo().toMillis() - getFrom().toMillis());
         }
 
         public Duration valueAt(double progress) {
             Duration distance = getDistance();
-            long value = (long) Math.round((double) distance.toNanos() * progress);
-            value += getFrom().getNano();
-            return Duration.ofNanos(value);
+            long value = (long) Math.round((double) distance.toMillis() * progress);
+            value += getFrom().toMillis();
+            return Duration.ofMillis(value);
+        }
+    }
+
+    public final class ImageUtil {
+
+        public static BufferedImage pixelate(BufferedImage imageToPixelate, int pixelSize) {
+            BufferedImage pixelateImage = new BufferedImage(
+                    imageToPixelate.getWidth(),
+                    imageToPixelate.getHeight(),
+                    imageToPixelate.getType());
+
+            for (int y = 0; y < imageToPixelate.getHeight(); y += pixelSize) {
+                for (int x = 0; x < imageToPixelate.getWidth(); x += pixelSize) {
+                    BufferedImage croppedImage = getCroppedImage(imageToPixelate, x, y, pixelSize, pixelSize);
+                    Color dominantColor = getDominantColor(croppedImage);
+                    for (int yd = y; (yd < y + pixelSize) && (yd < pixelateImage.getHeight()); yd++) {
+                        for (int xd = x; (xd < x + pixelSize) && (xd < pixelateImage.getWidth()); xd++) {
+                            pixelateImage.setRGB(xd, yd, dominantColor.getRGB());
+                        }
+                    }
+                }
+            }
+
+            return pixelateImage;
+        }
+
+        public static BufferedImage getCroppedImage(BufferedImage image, int startx, int starty, int width, int height) {
+            if (startx < 0) {
+                startx = 0;
+            }
+            if (starty < 0) {
+                starty = 0;
+            }
+            if (startx > image.getWidth()) {
+                startx = image.getWidth();
+            }
+            if (starty > image.getHeight()) {
+                starty = image.getHeight();
+            }
+            if (startx + width > image.getWidth()) {
+                width = image.getWidth() - startx;
+            }
+            if (starty + height > image.getHeight()) {
+                height = image.getHeight() - starty;
+            }
+            return image.getSubimage(startx, starty, width, height);
+        }
+
+        public static Color getDominantColor(BufferedImage image) {
+            int sumR = 0, sumB = 0, sumG = 0, sum2 = 0;
+            int color = 0;
+            for (int x = 0; x < image.getWidth(); x++) {
+                for (int y = 0; y < image.getHeight(); y++) {
+                    color = image.getRGB(x, y);
+                    Color c = new Color(color);
+                    sumR += c.getRed();
+                    sumB += c.getBlue();
+                    sumG += c.getGreen();
+                    sum2++;
+                }
+            }
+            return new Color(sumR / sum2, sumG / sum2, sumB / sum2);
         }
     }
 }
