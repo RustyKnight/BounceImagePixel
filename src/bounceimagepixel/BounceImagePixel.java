@@ -93,7 +93,7 @@ public class BounceImagePixel {
             }
         });
 
-        private AnimatableDuration transitionAnimation = new DefaultAnimatableDuration(Duration.ofSeconds(1), Curves.QUART_IN_OUT.getCurve(), new AnimatableDurationListenerAdapter() {
+        private AnimatableDuration transitionAnimation = new DefaultAnimatableDuration(Duration.ofSeconds(1), Curves.QUART_IN.getCurve(), new AnimatableDurationListenerAdapter() {
             @Override
             public void animationChanged(Animatable animator) {
                 alpha = alphaRange.valueAt(transitionAnimation.getProgress());
