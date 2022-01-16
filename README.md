@@ -7,7 +7,7 @@ Inspired by [Click to form an image](https://codepen.io/allanpope/pen/LVWYYd) an
 
 **This is an experiment**
 
-<img src="Bouncy.gif">
+<img src="Bouncy.gif"><img src="Bouncy02.gif">
 
 # Requirements
 
