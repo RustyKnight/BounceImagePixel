@@ -14,8 +14,6 @@ import java.awt.EventQueue;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.geom.Ellipse2D;
@@ -23,8 +21,8 @@ import java.awt.geom.Point2D;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
@@ -55,7 +53,7 @@ public class BounceImagePixel {
             @Override
             public void run() {
                 try {
-                    BufferedImage img = ImageIO.read(getClass().getResource("/images/MegaTokyo.png"));
+                    BufferedImage img = ImageIO.read(getClass().getResource("/images/MegaTokyo50.png"));
                     JFrame frame = new JFrame();
                     frame.add(new TestPane(img));
                     frame.pack();
@@ -132,7 +130,7 @@ public class BounceImagePixel {
 //                    }
                 }
             }
-            
+
             Collections.shuffle(dots);
 
             addMouseListener(new MouseAdapter() {
@@ -140,6 +138,7 @@ public class BounceImagePixel {
                 public void mouseClicked(MouseEvent e) {
                     animatable.stop();
                     dotsThatHaveCompleted = 0;
+                    Instant startedAt = Instant.now();
                     for (AnimatableDot dot : dots) {
                         switch (dot.getState()) {
                             case IMAGE:
@@ -150,6 +149,8 @@ public class BounceImagePixel {
                                 break;
                         }
                     }
+                    Duration duration = Duration.between(startedAt, Instant.now());
+                    System.out.println("Took: " + duration.toSecondsPart() + "." + duration.toMillisPart() + "s");
                     animatable.start();
                 }
             });
@@ -158,7 +159,7 @@ public class BounceImagePixel {
         private int dotsThatHaveCompleted = 0;
 
         protected void stopIfAllDotsCompleted() {
-            if (animatable.isAnimating()) {
+            if (animatable.isRunning()) {
                 if (dotsThatHaveCompleted >= dots.size()) {
                     animatable.stop();
                 }
@@ -259,22 +260,17 @@ public class BounceImagePixel {
 
         private Timer delayedStartTimer;
 
-        // This is left here because undoing is going to break my brain
-        protected void initialiseAndStartAnimation() {
-            startAnimation();
-        }
-
         protected abstract void stateDidChange();
 
         protected abstract void startAnimation();
 
     }
-    
+
     public static abstract class RandimisedDurationAnimatableDot extends AbstractAnimatableDot {
 
         // Randomise the bounce duration on each cycle
         private Random rnd = new Random();
-        private DurationRange delayRange = new DurationRange(Duration.ofSeconds(1), Duration.ofSeconds(5));
+        private DurationRange delayRange = new DurationRange(Duration.ofSeconds(5), Duration.ofSeconds(10));
 
         public RandimisedDurationAnimatableDot(Dot dot, Observer observer) {
             super(dot, observer);
@@ -284,7 +280,7 @@ public class BounceImagePixel {
         public Duration getAnimationDuration() {
             return delayRange.valueAt(rnd.nextDouble());
         }
-        
+
     }
 
     public static class MovableAnimatableDot extends RandimisedDurationAnimatableDot {
@@ -303,6 +299,9 @@ public class BounceImagePixel {
             this.bounceRange = animationRange;
             this.animationRange = bounceRange;
             this.currentLocation = dot.getImageLocation();
+
+            makeBounceAnimatable();
+            makeImageAnimatable();
         }
 
         @Override
@@ -322,41 +321,22 @@ public class BounceImagePixel {
                     preRollImageAnimation();
                     break;
                 case RUN:
-                    stopImageAnimation();
+                    imageAnimatable.stop();
                     isFirstBouncePass = true;
                     animationRange = new Point2DRange(currentLocation, bounceRange.getTo());
-                    initialiseAndStartAnimation();
+                    startAnimation();
                     break;
             }
         }
 
         protected void preRollImageAnimation() {
-            stopBounceAnimation();
+            bounceAnimatable.stop();
             if (currentLocation == getDot().getImageLocation()) {
-                stopImageAnimation();
+                imageAnimatable.stop();
                 return;
             }
             animationRange = new Point2DRange(currentLocation, getDot().getImageLocation());
             startAnimation();
-        }
-
-        protected void stopBounceAnimation() {
-            if (bounceAnimatable != null) {
-                stopAnimation(bounceAnimatable);
-                bounceAnimatable = null;
-            }
-        }
-
-        protected void stopImageAnimation() {
-            stopAnimation(imageAnimatable);
-            imageAnimatable = null;
-        }
-
-        protected void stopAnimation(Animatable animatable) {
-            if (bounceAnimatable != null) {
-                animatable.stop();
-                animatable = null;
-            }
         }
 
         @Override
@@ -368,27 +348,22 @@ public class BounceImagePixel {
             }
         }
 
-        protected void startBounceAnimation() {
-            if (getState() != RUN) {
-                return;
-            }
-            stopBounceAnimation();
+        protected void makeBounceAnimatable() {
             bounceAnimatable = new DefaultAnimatableDuration(getAnimationDuration(), Curves.QUART_IN_OUT.getCurve(), new AnimatableDurationListenerAdapter() {
-
                 @Override
                 public void animationCompleted(Animatable animator) {
-                    if (getState() == IMAGE && imageAnimatable == null) {
+                    if (getState() == IMAGE) {
+                        animator.stop();
                         preRollImageAnimation();
                         return;
                     }
                     currentLocation = animationRange.valueAt(1);
-                    stopBounceAnimation();
                     if (isFirstBouncePass) {
                         isFirstBouncePass = false;
                         animationRange = bounceRange;
                     }
                     animationRange.reverse();
-                    initialiseAndStartAnimation();
+                    bounceAnimatable.start();
                 }
 
                 @Override
@@ -397,21 +372,24 @@ public class BounceImagePixel {
                     currentLocation = animationRange.valueAt(progress);
                 }
             });
+        }
+
+        protected void startBounceAnimation() {
+            if (getState() != RUN) {
+                return;
+            }
+            if (bounceAnimatable.isRunning()) {
+                return;
+            }
             bounceAnimatable.start();
         }
 
-        protected void startImageAnimation() {
-            if (getState() != IMAGE) {
-                return;
-            }
-            if (imageAnimatable != null) {
-                return;
-            }
+        protected void makeImageAnimatable() {
             imageAnimatable = new DefaultAnimatableDuration(getAnimationDuration(), Curves.QUART_OUT.getCurve(), new AnimatableDurationListenerAdapter() {
                 @Override
                 public void animationCompleted(Animatable animator) {
                     currentLocation = animationRange.valueAt(1);
-                    stopImageAnimation();
+                    imageAnimatable.stop();
                     getObserver().dotAnimationDidComplete(MovableAnimatableDot.this);
                 }
 
@@ -421,6 +399,15 @@ public class BounceImagePixel {
                     currentLocation = animationRange.valueAt(progress);
                 }
             });
+        }
+
+        protected void startImageAnimation() {
+            if (getState() != IMAGE) {
+                return;
+            }
+            if (imageAnimatable.isRunning()) {
+                return;
+            }
             imageAnimatable.start();
         }
 
@@ -458,11 +445,11 @@ public class BounceImagePixel {
             switch (getState()) {
                 case IMAGE:
                     animationRange = fadeInRange;
-                    initialiseAndStartAnimation();
+                    startAnimation();
                     break;
                 case RUN:
                     animationRange = fadeOutRange;
-                    initialiseAndStartAnimation();
+                    startAnimation();
                     break;
             }
         }
