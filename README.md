@@ -37,6 +37,8 @@ There is a lot of room for optimisation.
 
 *nb: 2 & 3 are now basically implemented*
 
+6. Reduce the number of "animatables", possible using a single "animatable" to update all the dots?
+
 ## Added
 
 * Support to pixelate the image into "larger" blocks (sub images).  For larger images, this will improve performance and is closer to how the original example works
