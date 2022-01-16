@@ -36,3 +36,11 @@ There is a lot of room for optimisation.
 5. Only a small subset of pixels could be running at any one time, all the other pixels would be held at their "target" points, a little like a pool, so when a pixel reaches it's destination, it's place back in the pool of avaliable pixels and new pixels are drawen out of it.  This might reduce the "static noise" of that the animation suffers from right now
 
 *nb: 2 & 3 are now basically implemented*
+
+## Added
+
+* Support to pixelate the image into "larger" blocks (sub images).  For larger images, this will improve performance and is closer to how the original example works
+
+## Fixed
+
+* Randomised duration, as it wasn't generating approproate values with the expected range
