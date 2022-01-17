@@ -72,7 +72,7 @@ public class FadableAnimatableDot extends RandimisedDurationAnimatableDot {
         if (animatable != null) {
             return;
         }
-        animatable = new DefaultAnimatableDuration(getAnimationDuration(), Curves.QUART_IN_OUT.getCurve(), new AnimatableDurationListenerAdapter() {
+        animatable = new DefaultAnimatableDuration(getAnimationDuration(), Curves.SINE_IN_OUT.getCurve(), new AnimatableDurationListenerAdapter() {
             @Override
             public void animationCompleted(Animatable animator) {
                 opacity = animationRange.valueAt(1);

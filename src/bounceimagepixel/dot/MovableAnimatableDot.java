@@ -83,7 +83,7 @@ public class MovableAnimatableDot extends RandimisedDurationAnimatableDot {
     }
 
     protected void makeBounceAnimatable() {
-        bounceAnimatable = new DefaultAnimatableDuration(getAnimationDuration(), Curves.QUART_IN_OUT.getCurve(), new AnimatableDurationListenerAdapter() {
+        bounceAnimatable = new DefaultAnimatableDuration(getAnimationDuration(), Curves.SINE_IN_OUT.getCurve(), new AnimatableDurationListenerAdapter() {
             @Override
             public void animationCompleted(Animatable animator) {
                 if (getState() == State.IMAGE) {
@@ -121,7 +121,7 @@ public class MovableAnimatableDot extends RandimisedDurationAnimatableDot {
     protected void makeImageAnimatable() {
         //            Duration duration = getAnimationDuration();
         Duration duration = Duration.ofSeconds(1);
-        imageAnimatable = new DefaultAnimatableDuration(duration, Curves.QUART_OUT.getCurve(), new AnimatableDurationListenerAdapter() {
+        imageAnimatable = new DefaultAnimatableDuration(duration, Curves.SINE_OUT.getCurve(), new AnimatableDurationListenerAdapter() {
             @Override
             public void animationCompleted(Animatable animator) {
                 currentLocation = animationRange.valueAt(1);
